@@ -5,23 +5,17 @@ date: "7 April 2016"
 output: html_document
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-## Introduction
-
-The dataset is
+The Traffic dataset is collected from bey2ollak.com, This EDA summarizes some of important data features and show some of the traffic activities and patterns in Cairo.  
 
 
-```{r}
+```{r, result="hide"}
 library(grid)
 library(ggplot2)
 library(dplyr)
 library(mixtools)
 ```
 
-```{r, result="hide"}
+```{r, echo=FALSE}
 Sys.setlocale('LC_ALL', 'en_US.UTF-8')
 ```
 
@@ -46,17 +40,6 @@ data %>% str()
 data %>% summary()
 ```
 
-
-
-The rows represent a traffic report made on the website. The columns meaning can be extracted by looking into the website and how they use the data to render the fields. The meaning of the important columns are:
-
-Column        | Meaning
-------------- | -------------
-crawl_date    | Cell 2
-ad.*          | information related to advertisment
-rd.*          | information related to a road
-hr            | This is either the hour the report was made in or the number of hours elapsed when the report is crawled
-
 Now we need to define the report time.
 
 Let's have a look on rd.rp.hr.
@@ -66,6 +49,25 @@ data$rd.rp.hr %>% boxplot()
 ```
 
 rd.rp.hr has some data above 24. Thus, we can confirm that it is the hours elapsed.
+
+
+The rows represent a traffic report made on the website. The columns meaning can be extracted by looking into the website and how they use the data to render the fields. The meaning of the important columns are:
+
+Column Pattern | Meaning
+-------------- | --------------
+crawl_date     | time data was crawled
+ad.*           | information related to advertisment
+rd.*           | information related to a road
+hr             | the number of hours elapsed from the report was made to crawling date
+mn             | hr + mn gives the exact time elapased from the report date to crawling date
+rd.rp          | data related to a report
+rd.rp.fullnm   | reporter fullname
+rp.rp.nm       | reporter username
+stid           | rd.rp.stid is the status id of the report; rd.stid is the road status id
+rd.nm          | road name (<name>;<source> To <Destination>)
+rd.rp.cm       | user comment
+rd.ri          | road id
+
 
 Now let's calcualte the actual report time.
 
@@ -77,7 +79,7 @@ data$report_date$hour   <- (data$crawl_date$hour - data$rd.rp.hr) %% 24
 data$report_date$minute <- data$crawl_date$minute - data$rd.rp.mn
 ```
 
-Prepare Time units
+Now we prepare Time units for usage simplicity.
 
 ```{r}
 data$hour <- data$report_date$hour
@@ -86,10 +88,11 @@ data$wday <- data$report_date$wday
 data$yday <- data$report_date$yday
 ```
 
-The stid columns hold report status. Let's confirm the meaning of each id.
+The stid columns hold report status. Let's confirm the meaning of each id by viewing a sample of the comments for each status id.
 
 stid = 1
 ```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 1, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
 ```
 
 stid = 2
@@ -152,15 +155,15 @@ data.unq <- data[!duplicated(data[, c('rd.rp.cmid')]), ]
 ```
 
 
-Weekends. Friday and Saturday are the weekends in Egypt.
+Weekends. Friday and Saturday are the weekends in Egypt. Let's use this to define a weekend row.
 
 ```{r}
-data.weekend <- data$unq[data.unq$wday >= 5, ]
-data.workday <- data$unq[data.unq$wday < 5, ]
+data.weekend <- data.unq[data.unq$wday >= 5, ]
+data.workday <- data.unq[data.unq$wday < 5, ]
 ```
 
 
-We can add labels for for the city (alex or cairo) which is retrieved from an XML file from the website.
+We can add labels for for the city (alex or cairo) which is retrieved from an XML file from the website. The XML file contains road name and road id which I parsed with a script that saves the ids in the following csv files.
 
 ```{r}
 cairo.roads <- read.csv("cairo-roads-ids.csv")
@@ -171,13 +174,13 @@ data.unq <- merge(data.unq, rbind(cairo.roads, alex.roads), by="rd.ri")
 ```
 
 
-Road names are written in a certian format
+Road names are written in a certian format as shown in the above columns definition. 
 
 ```{r}
 data.unq$rd.nm %>% sample(10)
 ```
 
-We can constrcut the road start and end from this.
+We can decouple the information from the road name to constrcut the source and the destination of the road.
 
 ```{r}
 data.unq$rd.nm <- as.character(data.unq$rd.nm)
@@ -193,8 +196,7 @@ data.unq$road.direction.from.full <- sapply(data.unq$rd.nm, function(x){unlist(s
 data.unq[, c("road.direction.from", "road.direction.to", "road.direction.from.full")] %>% unique() %>% head(10)
 ```
 
-
-### Activity Analaysis
+Let's have a look on the crawling distribtion per hour.
 
 ```{r}
 qplot(data$crawl_date$hour, geom="histogram", binwidth=1, xlab = "Crawling Hour", ylab = "Count")
@@ -214,7 +216,7 @@ Luckily, There's no obvious breaks.
 Let's focus on the important columns with respect to the scope of traffic analaysis.
 
 ```{r}
-names.imp <- names(data)
+names.imp <- names(data.unq)
 names.imp <- names.imp[!grepl("^ad", names.imp)]
 data.unq <- data.unq[, names.imp]
 names.imp
@@ -231,7 +233,11 @@ Percentage of duplicate data
 1 - (nrow(data.unq) / nrow(data))
 ```
 
-### Activity Analysis
+
+### Activity Analaysis
+
+Let's have a look on the activities (reports) patterns and histograms.
+
 
 Total number of activities per hour
 
@@ -254,7 +260,7 @@ qplot(data.unq$wday, geom="histogram", binwidth=1, xlim=c(0,7), xlab='Week day',
 Activities per Weekdays
 
 ```{r}
-qplot(data.workday$report_date$hour, geom="histogram", binwidth=1, xlim=c(0,24), fill='orange', xlab='Workday Day hour', ylab='Number of reports')
+qplot(data.workday$hour, geom="histogram", binwidth=1, xlim=c(0,24), xlab='Workday Day hour', ylab='Number of reports')
 ```
 
 Count of each type of activity
@@ -264,15 +270,25 @@ p <- ggplot(data.unq , aes(as.factor(rd.rp.stid)))
 p + geom_bar(fill=c("#178B37", "#7CBD33", "#FEC00D", "#F37F1B", "#E7252D", "black", "gray", "gray", "gray", "gray", "gray")) + scale_x_discrete(labels=c(stid, "NA"))
 ```
 
-Count of each type of activity
+
+Count of each type of activity in Cairo only
 
 ```{r}
-p <- ggplot(data.unq , aes(as.factor(rd.rp.stid)))
+p <- ggplot(data.unq[data.unq$city=="cairo",] , aes(as.factor(rd.rp.stid)))
 p + geom_bar(fill=c("#178B37", "#7CBD33", "#FEC00D", "#F37F1B", "#E7252D", "black", "gray", "gray", "gray", "gray", "gray")) + scale_x_discrete(labels=c(stid, "NA"))
 ```
 
+Count of each type of activity in Cairo only
 
-```{r, result="hide"}
+```{r}
+p <- ggplot(data.unq[data.unq$city=="alex",] , aes(as.factor(rd.rp.stid)))
+p + geom_bar(fill=c("#178B37", "#7CBD33", "#FEC00D", "#F37F1B", "#E7252D", "black", "gray", "gray", "gray", "gray", "gray")) + scale_x_discrete(labels=c(stid, "NA"))
+```
+
+Activities in alex is not huge and is biased, which does not follow the usual patterns.
+
+
+```{r, result="hide", echo=FALSE}
 # Multiple plot function
 #
 # ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
@@ -321,12 +337,14 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 
 ## Traffic Analaysis
 
-Road status Id indicate the traffic status of the road. we can use it to see the traffic density pattern per day.
+Road status Id indicate the traffic status of the road. we can use it to have some insights on traffic pattern. 
+
+
+Let's see what is the traffic pattern per day, by plotting the stid per hour and fit a smoothing line to indicate where the is density per hour.
 
 
 ```{r}
 traffic <- data.unq[data.unq$rd.rp.stid < 6,]
-traffic$hour <- traffic$report_date$hour
 traffic <- traffic[, c("rd.rp.stid", "hour", "city")]
 traffic <- na.omit(traffic)
 scatter.smooth(traffic$hour, traffic$rd.rp.stid, col="#CCCCCC", span = 0.23)
@@ -337,9 +355,14 @@ Now Let's compare the traffic pattern for Cairo and Alex
 ```{r}
 traffic.cairo <- traffic[traffic$city == "cairo", ]
 traffic.alex <- traffic[traffic$city == "alex", ]
-p1 <- scatter.smooth(traffic.cairo$hour, traffic.cairo$rd.rp.stid, col="#CCCCCC", span = 0.23)
-p2 <- scatter.smooth(traffic.alex$hour, traffic.alex$rd.rp.stid, col="#CCCCCC", span = 0.23)
-multiplot(p1, p2, ncol = 2)
+p1 <- scatter.smooth(traffic.cairo$hour, traffic.cairo$rd.rp.stid, col="#CCCCCC", span = 0.3)
+
+```
+
+Pattern in Alex is not significant.
+
+```{r}
+p2 <- scatter.smooth(traffic.alex$hour, traffic.alex$rd.rp.stid, col="#CCCCCC", span = 0.3)
 ```
 
 
@@ -423,7 +446,7 @@ Let's focus on cairo and try to pick the two means (peaks) of the traffic by fit
 ```{r}
 library(mixtools)
 #Fit two Normals
-dist = normalmixEM(data.unq$hour[!is.na(data.unq$rd.rp.stid) data.unq$city=="cairo" & data.unq$rd.rp.stid > 3 & data.unq$rd.rp.stid < 6], lambda = 0.5)
+dist = normalmixEM(data.unq$hour[!is.na(data.unq$rd.rp.stid) & data.unq$city=="cairo" & data.unq$rd.rp.stid > 3 & data.unq$rd.rp.stid < 6], lambda = 0.5)
 plot(dist, density=TRUE, loglik=FALSE)
 ```
 
@@ -504,24 +527,107 @@ paste(left, right)
 This shows confirms that roads in weekends tend to be crowded in later hours than in workdays.
 
 ```{r}
-qqplot(working.dist$za7ma, weekend.dist$za7ma)
+qqplot(working.dist$za7ma, weekend.dist$za7ma); qqline(working.dist$za7ma, weekend.dist$za7ma)
 ```
 
+We can see from the plot that the weekend distribution slightly exceeds the workdays in later hours however, in earlier hour the weekdays exceeds.
 
 ### Accidents
 
 Let's have a look on how the accidents in Cairo look like.
 
 ```{r}
-accidents.hour <- data.unq$hour[data$city == "cairo" & data.unq$rd.rp.stid == 8]
+accidents.hour <- data.unq$hour[data.unq$city == "cairo" & data.unq$rd.rp.stid == 8]
 accidents.hour <- na.omit(accidents.hour)
 ```
 
+Accidents
 
+```{r}
+qplot(accidents.hour, geom="histogram", binwidth=1, xlab = "Hour", ylab = "Count")
+```
+
+The distribution is similar to the bimodal distribution.
+
+```{r}
+dist = normalmixEM(accidents.hour, lambda = 0.5)
+plot(dist, density=TRUE, loglik=FALSE)
+```
+
+Means of Accidents Hour
+
+```{r}
+dist$mu
+```
+
+
+Standard Deviation
+
+```{r}
+dist$sigma
+```
+
+
+### Road names
+
+Let's see if we can use the road names to build a heatmap.
+
+```{r}
+library("igraph")
+q <- data.unq %>% select(road.direction.from, road.direction.to, road.name, city) %>%
+  filter(city == "cairo") %>% group_by(road.direction.to, road.direction.from) %>% summarize(count=length(road.name))
+
+q <- q[complete.cases(q), ]
+
+mat <- matrix(0, length(unique(q$road.direction.from)), length(unique(q$road.direction.to))) 
+rownames(mat) <- unique(q$road.direction.from)
+colnames(mat) <- unique(q$road.direction.to)
+f <- as.data.frame(mat)
+for (i in 1:length(f)) {
+  f[q$road.direction.from[i], q$road.direction.to[i]] <- q$count[i]
+}
+mat <- as.matrix(f)
+palf <- colorRampPalette(c("gold", "blue"))
+heatmap(mat, Rowv = NA, Colv = NA, col = palf(100), scale="none", margins=c(10,10) )
+```
+
+Road names are not well structured to build a graph from a map.
 
 
 ## Comments Analysis
 
+Let's see if there are significant comments people write when there is accidents.
 
-## Conclusion
+```{r}
+#ignore gps comments
+data.unq$rd.rp.cm <- as.character(data.unq$rd.rp.cm)
+cm.words <- as.factor(unlist(lapply(data.unq$rd.rp.cm[data.unq$rd.rp.nm != "bey2ollakgps"], function(s){strsplit(s, " ")})))
+cm.words <- as.factor(unlist(lapply(data.unq$rd.rp.cm[data.unq$rd.rp.stid == 8], function(s){strsplit(s, " ")})))
+cm.words.smpl <- cm.words[sample(500000)]
+
+```
+
+Show a sample of the most common words
+
+```{r}
+words.count <- tapply(as.factor(cm.words.smpl), as.factor(cm.words.smpl), FUN=length)
+words.count <- sort(words.count, decreasing=T)
+words.count %>% head(50)
+```
+
+These words might give a hint for the reason of the accident if clustered. for example works like  ???????????? , ?????? , ???????????? might indicate hints about the accidents.
+
+These are a sample of the most common words in heavy traffic reports.
+
+```{r}
+m.words <- as.factor(unlist(lapply(data.unq$rd.rp.cm[data.unq$rd.rp.stid == 5], function(s){strsplit(s, " ")})))
+cm.words.smpl <- cm.words[sample(5000000)]
+words.count <- tapply(as.factor(cm.words.smpl), as.factor(cm.words.smpl), FUN=length)
+words.count <- sort(words.count, decreasing=T)
+words.count %>% head(50)
+```
+
+This shows that people may report an accident with an stid=5
+
+
 
