@@ -8,7 +8,7 @@ output: html_document
 The Traffic dataset is collected from bey2ollak.com, This EDA summarizes some of important data features and show some of the traffic activities and patterns in Cairo.  
 
 
-```{r, result="hide"}
+```{r, warning=FALSE}
 library(grid)
 library(ggplot2)
 library(dplyr)
