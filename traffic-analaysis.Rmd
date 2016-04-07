@@ -1,21 +1,19 @@
 ---
 title: "Bey2ollak Traffic Analaysis"
-author: "Mohamed Farghal"
-date: "7 April 2016"
 output: html_document
 ---
 
 The Traffic dataset is collected from bey2ollak.com, This EDA summarizes some of important data features and show some of the traffic activities and patterns in Cairo.  
 
 
-```{r, warning=FALSE}
+```{r, results="hide"}
 library(grid)
 library(ggplot2)
 library(dplyr)
 library(mixtools)
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, results="hide"}
 Sys.setlocale('LC_ALL', 'en_US.UTF-8')
 ```
 
@@ -343,7 +341,7 @@ Road status Id indicate the traffic status of the road. we can use it to have so
 Let's see what is the traffic pattern per day, by plotting the stid per hour and fit a smoothing line to indicate where the is density per hour.
 
 
-```{r}
+```{r, warning=FALSE}
 traffic <- data.unq[data.unq$rd.rp.stid < 6,]
 traffic <- traffic[, c("rd.rp.stid", "hour", "city")]
 traffic <- na.omit(traffic)
@@ -355,14 +353,14 @@ Now Let's compare the traffic pattern for Cairo and Alex
 ```{r}
 traffic.cairo <- traffic[traffic$city == "cairo", ]
 traffic.alex <- traffic[traffic$city == "alex", ]
-p1 <- scatter.smooth(traffic.cairo$hour, traffic.cairo$rd.rp.stid, col="#CCCCCC", span = 0.3)
+p1 <- scatter.smooth(traffic.cairo$hour, traffic.cairo$rd.rp.stid, col="#CCCCCC", span = 0.23)
 
 ```
 
 Pattern in Alex is not significant.
 
-```{r}
-p2 <- scatter.smooth(traffic.alex$hour, traffic.alex$rd.rp.stid, col="#CCCCCC", span = 0.3)
+```{r, warning=FALSE}
+p2 <- scatter.smooth(traffic.alex$hour, traffic.alex$rd.rp.stid, col="#CCCCCC", span = 0.23)
 ```
 
 
