@@ -1,0 +1,527 @@
+---
+title: "Bey2ollak Traffic Analaysis"
+author: "Mohamed Farghal"
+date: "7 April 2016"
+output: html_document
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Introduction
+
+The dataset is
+
+
+```{r}
+library(grid)
+library(ggplot2)
+library(dplyr)
+library(mixtools)
+```
+
+```{r, result="hide"}
+Sys.setlocale('LC_ALL', 'en_US.UTF-8')
+```
+
+
+```{r}
+data <- read.csv("../traffic-data.csv", encoding="UTF-8")
+data %>% names()
+```
+
+```{r}
+data %>% nrow()
+```
+
+
+### Data Summary
+
+```{r}
+data %>% str()
+```
+
+```{r}
+data %>% summary()
+```
+
+
+
+The rows represent a traffic report made on the website. The columns meaning can be extracted by looking into the website and how they use the data to render the fields. The meaning of the important columns are:
+
+Column        | Meaning
+------------- | -------------
+crawl_date    | Cell 2
+ad.*          | information related to advertisment
+rd.*          | information related to a road
+hr            | This is either the hour the report was made in or the number of hours elapsed when the report is crawled
+
+Now we need to define the report time.
+
+Let's have a look on rd.rp.hr.
+
+```{r}
+data$rd.rp.hr %>% boxplot()
+```
+
+rd.rp.hr has some data above 24. Thus, we can confirm that it is the hours elapsed.
+
+Now let's calcualte the actual report time.
+
+```{r}
+data$crawl_date         <- as.POSIXct(strptime(data$crawl_date, format="%A %b %d %H:%M:%S UTC %Y"), tz='UTC')
+data$crawl_date         <- as.POSIXlt(data$crawl_date, tz="Africa/Cairo")
+data$report_date        <- data$crawl_date
+data$report_date$hour   <- (data$crawl_date$hour - data$rd.rp.hr) %% 24
+data$report_date$minute <- data$crawl_date$minute - data$rd.rp.mn
+```
+
+Prepare Time units
+
+```{r}
+data$hour <- data$report_date$hour
+data$min  <- data$report_date$min
+data$wday <- data$report_date$wday
+data$yday <- data$report_date$yday
+```
+
+The stid columns hold report status. Let's confirm the meaning of each id.
+
+stid = 1
+```{r}
+```
+
+stid = 2
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 2, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+stid = 3
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 3, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+stid = 4
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 4, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+stid = 5
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 5, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+stid = 6
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 6, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+stid = 7
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 7, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+stid = 8
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 8, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+stid = 9
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 9, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+stid = 10
+```{r}
+data[!is.na(data$rd.rp.stid) & data$rd.rp.stid == 10, c('rd.rp.stid', 'rd.rp.cm')] %>% head(10)
+```
+
+According to the data samples and the label on the website. the stid categories are:
+```{r}
+stid <- c("7alawa", "lazez", "mashy" , "za7ma", "Noamal", "Question", "Khatar", "7adsa", "3otl", "ma3loma")
+```
+
+
+### Data Cleaning and Feature Engineering
+
+First we need to remove duplicate rows
+
+```{r}
+data.unq <- data[!duplicated(data[, c('rd.rp.cmid')]), ]
+```
+
+
+Weekends. Friday and Saturday are the weekends in Egypt.
+
+```{r}
+data.weekend <- data$unq[data.unq$wday >= 5, ]
+data.workday <- data$unq[data.unq$wday < 5, ]
+```
+
+
+We can add labels for for the city (alex or cairo) which is retrieved from an XML file from the website.
+
+```{r}
+cairo.roads <- read.csv("cairo-roads-ids.csv")
+alex.roads <- read.csv("alex-roads-ids.csv")
+cairo.roads$city = "cairo"
+alex.roads$city = "alex"
+data.unq <- merge(data.unq, rbind(cairo.roads, alex.roads), by="rd.ri")
+```
+
+
+Road names are written in a certian format
+
+```{r}
+data.unq$rd.nm %>% sample(10)
+```
+
+We can constrcut the road start and end from this.
+
+```{r}
+data.unq$rd.nm <- as.character(data.unq$rd.nm)
+data.unq$road.name <- sapply(data.unq$rd.nm, function(x){unlist(strsplit(x, ";"))[1]})
+data.unq$road.direction <- sapply(data.unq$rd.nm, function(x){unlist(strsplit(x, ";"))[2]})
+data.unq$road.direction.from <- sapply(data.unq$road.direction, function(x){unlist(strsplit(x, "To"))[1]})
+data.unq$road.direction.to <- sapply(data.unq$road.direction, function(x){unlist(strsplit(x, "To"))[2]})
+data.unq$road.direction.from.full <- sapply(data.unq$rd.nm, function(x){unlist(strsplit(x, "To"))[1]})
+```
+
+
+```{r}
+data.unq[, c("road.direction.from", "road.direction.to", "road.direction.from.full")] %>% unique() %>% head(10)
+```
+
+
+### Activity Analaysis
+
+```{r}
+qplot(data$crawl_date$hour, geom="histogram", binwidth=1, xlab = "Crawling Hour", ylab = "Count")
+```
+
+The distribution of the crawling hour cannot tell accurate information about activities.
+
+Let's make sure that the crawling was made continously without breaks.
+
+```{r}
+ggplot(data, aes(yday)) + stat_ecdf(geom = "step") + xlab("Year Day") + ylab("CMF")
+```
+
+Luckily, There's no obvious breaks.
+
+
+Let's focus on the important columns with respect to the scope of traffic analaysis.
+
+```{r}
+names.imp <- names(data)
+names.imp <- names.imp[!grepl("^ad", names.imp)]
+data.unq <- data.unq[, names.imp]
+names.imp
+```
+
+
+```{r}
+data.unq %>% nrow()
+```
+
+Percentage of duplicate data
+
+```{r}
+1 - (nrow(data.unq) / nrow(data))
+```
+
+### Activity Analysis
+
+Total number of activities per hour
+
+```{r}
+qplot(data.unq$hour, geom="histogram", binwidth=1, xlim=c(0,24), xlab='Day hour', ylab='Reports Count')
+```
+
+Activities per day
+```{r}
+qplot(data.unq$yday, geom="histogram", binwidth=1, xlab='Day', ylab='Reports Count')
+```
+
+
+Activities per Weekday
+
+```{r}
+qplot(data.unq$wday, geom="histogram", binwidth=1, xlim=c(0,7), xlab='Week day', ylab='Reports Count')
+```
+
+Activities per Weekdays
+
+```{r}
+qplot(data.workday$report_date$hour, geom="histogram", binwidth=1, xlim=c(0,24), fill='orange', xlab='Workday Day hour', ylab='Number of reports')
+```
+
+Count of each type of activity
+
+```{r}
+p <- ggplot(data.unq , aes(as.factor(rd.rp.stid)))
+p + geom_bar(fill=c("#178B37", "#7CBD33", "#FEC00D", "#F37F1B", "#E7252D", "black", "gray", "gray", "gray", "gray", "gray")) + scale_x_discrete(labels=c(stid, "NA"))
+```
+
+Count of each type of activity
+
+```{r}
+p <- ggplot(data.unq , aes(as.factor(rd.rp.stid)))
+p + geom_bar(fill=c("#178B37", "#7CBD33", "#FEC00D", "#F37F1B", "#E7252D", "black", "gray", "gray", "gray", "gray", "gray")) + scale_x_discrete(labels=c(stid, "NA"))
+```
+
+
+```{r, result="hide"}
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  require(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+
+
+
+## Traffic Analaysis
+
+Road status Id indicate the traffic status of the road. we can use it to see the traffic density pattern per day.
+
+
+```{r}
+traffic <- data.unq[data.unq$rd.rp.stid < 6,]
+traffic$hour <- traffic$report_date$hour
+traffic <- traffic[, c("rd.rp.stid", "hour", "city")]
+traffic <- na.omit(traffic)
+scatter.smooth(traffic$hour, traffic$rd.rp.stid, col="#CCCCCC", span = 0.23)
+```
+
+Now Let's compare the traffic pattern for Cairo and Alex
+
+```{r}
+traffic.cairo <- traffic[traffic$city == "cairo", ]
+traffic.alex <- traffic[traffic$city == "alex", ]
+p1 <- scatter.smooth(traffic.cairo$hour, traffic.cairo$rd.rp.stid, col="#CCCCCC", span = 0.23)
+p2 <- scatter.smooth(traffic.alex$hour, traffic.alex$rd.rp.stid, col="#CCCCCC", span = 0.23)
+multiplot(p1, p2, ncol = 2)
+```
+
+
+Traffic in cairo is similar to a bimodal distribution where the means can indicate the rush hours.
+
+Let's first define a heavy vs non-heavy traffic
+
+```{r}
+data.unq$report.is.za7ma <- data.unq$rd.rp.stid > 3 & data.unq$rd.rp.stid < 6
+data.unq$report.is.mshza7ma <- data.unq$rd.rp.stid <= 3
+data.unq$road.is.za7ma <- data.unq$rd.stid > 3 & data.unq$rd.stid < 6 & data.unq$rd.hr < 1 
+data.unq$road.is.mshza7ma <- data.unq$rd.stid <= 3 & data.unq$rd.hr < 1
+```
+
+Then we group by hour to see the number of heavy traffic reports vs non heavy.
+
+```{r}
+road.dist <- data.unq[, c("hour", "road.is.za7ma", "road.is.mshza7ma", "city", "report.is.za7ma", "report.is.mshza7ma")] %>%
+filter(!is.na(road.is.za7ma)) %>% filter(!is.na(report.is.za7ma)) %>%
+group_by(hour) %>%
+summarize(za7ma=sum(road.is.za7ma), mshza7ma=sum(road.is.mshza7ma), za7ma.per=za7ma/mshza7ma,
+         report.za7ma=sum(report.is.za7ma), report.mshza7ma=sum(report.is.mshza7ma),
+         report.za7ma.per=report.za7ma/(report.za7ma + report.mshza7ma))
+```
+
+
+```{r}
+p <- ggplot(data=road.dist) + ylab("Reports Count")
+p <- p + geom_bar(aes(x=0:23, y=report.mshza7ma), fill="#66CC99", stat="identity" )
+p <- p + geom_bar(aes(x=0:23, y=report.za7ma), fill="#FF9999", stat="identity")
+p
+```
+
+If a road has traffic jam, many reports could be reporting this. Thus, let's have a look on the road status. But we need to make sure that the last report was made less than one hour ago, which was done while setting the road status above.
+
+```{r}
+p <- ggplot(data=road.dist) + ylab("Reports Count")
+p <- p + geom_bar(aes(x=0:23, y=mshza7ma), fill="#66CC99", stat="identity")
+p <- p + geom_bar(aes(x=0:23, y=za7ma), fill="#FF9999", stat="identity")
+p <- p + geom_line(aes(x=0:23, y=za7ma, fill="black"), alpha=0.3)
+p
+```
+
+Perfect. The road status follows the same bimodal pattern. But is this the case in all days?
+
+Let's draw the same plot for each weekday
+
+```{r}
+road.day.dist <- data.unq[, c("hour", "wday", "road.is.za7ma", "road.is.mshza7ma", "city", "report.is.za7ma", "report.is.mshza7ma")] %>%
+filter(!is.na(road.is.za7ma)) %>% filter(!is.na(report.is.za7ma)) %>%
+group_by(hour, wday) %>%
+summarize(za7ma=sum(road.is.za7ma), mshza7ma=sum(road.is.mshza7ma), za7ma.per=za7ma/mshza7ma,
+         report.za7ma=sum(report.is.za7ma), report.mshza7ma=sum(report.is.mshza7ma),
+         report.za7ma.per=report.za7ma/(report.za7ma + report.mshza7ma))
+```
+
+
+```{r}
+p <- ggplot(data=road.day.dist) 
+p <- p + facet_grid(~wday)
+p <- p + geom_bar(aes(x=hour, y=mshza7ma), fill="#66CC99", stat="identity")
+p <- p + geom_bar(aes(x=hour, y=za7ma), fill="#FF9999", stat="identity")
+p 
+```
+
+We can see that all days follow the same distribution excepet for weekends.
+
+We can confirm the distribution by checking the heavy traffic percentage out of all traffic reports.
+
+```{r}
+p <- ggplot(data=road.dist)
+p <- p + geom_bar(aes(x=0:23, y=report.za7ma.per), fill="orange", stat="identity")
+p <- p + geom_line(aes(x=0:23, y=report.za7ma.per, fill="black"), alpha="0.5")
+p
+```
+
+Now we can assume that the traffic follows a biomodal distriubiton.
+
+Let's focus on cairo and try to pick the two means (peaks) of the traffic by fitting a bimodal distribtuion.
+
+```{r}
+library(mixtools)
+#Fit two Normals
+dist = normalmixEM(data.unq$hour[!is.na(data.unq$rd.rp.stid) data.unq$city=="cairo" & data.unq$rd.rp.stid > 3 & data.unq$rd.rp.stid < 6], lambda = 0.5)
+plot(dist, density=TRUE, loglik=FALSE)
+```
+
+Thus the two means are
+
+```{r}
+dist$mu
+```
+
+with standard deviation of
+
+```{r}
+dist$sigma
+```
+
+It's also useful to check the mean of the 
+
+Now let's prove that average heavy traffic hour is different on weekdays from weekends
+
+first, the mean and confidence level of the heavy traffic on weekdays
+
+```{r}
+road.day.dist$working.day <- road.day.dist$wday < 5
+working.dist <- road.day.dist[road.day.dist$working.day == T,]
+m <- weighted.mean(working.dist$hour, working.dist$za7ma)
+N <- length(working.dist)
+variance <- sum(working.dist$za7ma * ((working.dist$hour - m) ^ 2)) / ((sum(working.dist$za7ma) * (N- 1)) / N)  
+deviation <- sqrt(variance)
+```
+
+Mean and standard deviation
+
+```{r}
+paste(m, deviation)
+```
+
+Thus, the 95% confidence internval
+
+```{r}
+error <- qnorm(0.95)*deviation/sqrt(N)
+left <- m - error
+right <- m + error
+```
+
+The mean of za7ma roads daily hour in workday is with 95% confidence within:
+
+```{r}
+paste(left, right)
+```
+
+Let's do the same for Weekends.
+
+```{r}
+road.day.dist$weekend <- road.day.dist$wday >= 5
+weekend.dist <- road.day.dist[road.day.dist$weekend == T,]
+m <- weighted.mean(weekend.dist$hour, weekend.dist$za7ma)
+N <- length(weekend.dist)
+variance <- sum(weekend.dist$za7ma * ((weekend.dist$hour - m) ^ 2)) / ((sum(weekend.dist$za7ma) * (N- 1)) / N)  
+deviation <- sqrt(variance)
+```
+
+```{r}
+paste(m, deviation)
+```
+
+```{r}
+error <- qnorm(0.95)*deviation/sqrt(N)
+left <- m - error
+right <- m + error
+```
+
+The mean of za7ma roads daily hour in weekends is with 95% confidence within:
+
+```{r}
+paste(left, right)
+```
+
+This shows confirms that roads in weekends tend to be crowded in later hours than in workdays.
+
+```{r}
+qqplot(working.dist$za7ma, weekend.dist$za7ma)
+```
+
+
+### Accidents
+
+Let's have a look on how the accidents in Cairo look like.
+
+```{r}
+accidents.hour <- data.unq$hour[data$city == "cairo" & data.unq$rd.rp.stid == 8]
+accidents.hour <- na.omit(accidents.hour)
+```
+
+
+
+
+## Comments Analysis
+
+
+## Conclusion
+
