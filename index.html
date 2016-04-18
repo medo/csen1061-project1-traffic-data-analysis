@@ -9,7 +9,7 @@
 <meta name="generator" content="pandoc" />
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta property="og:image" content="http://i0.wp.com/techmoran.com/wp-content/uploads/2014/07/Egypt-cairo-traffic-650_41611.jpg" />
-
+<meta name='description' content='Traffic Expoloratory Data Analysis on Data collected from Bey2ollak.com. The analysis shows some traffic patterns in cairo.'>
 
 
 <title>Bey2ollak Traffic Analaysis</title>
@@ -112,8 +112,21 @@ $(document).ready(function () {
 
 </div>
 
+<h3>Description</h3>
+<p>Traffic in Cairo is a disaster, this EDA uses data collected from bey2ollak.com to show some traffic patterns in Cairo and Alexandria. The data contains reports from people on Bey2ollak. People can report the state of traffic into one of the following categories:
 
-<p>The Traffic dataset is collected from bey2ollak.com, This EDA summarizes some of important data features and show some of the traffic activities and patterns in Cairo.</p>
+<ul>
+  <li>7alawa (The Road is perfect)</li>
+  <li>lazeez (The Road is good)</li>
+  <li>mashy (The Road is slightly good) </li>
+  <li>za7ma (The Road is crowded) </li>    
+  <li>mafeesh 2amal (The Road is not moving at all) </li>
+  <li>Ask for update</li>
+  <li>Report Accident</li>
+</ul>
+
+<p>The reports are collected from Feb 6 2016 to Feb 20 2016 (2 weeks)</p>
+
 <pre class="r"><code>library(grid)
 library(ggplot2)
 library(dplyr)
